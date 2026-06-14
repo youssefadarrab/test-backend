@@ -13,10 +13,14 @@ class Settings:
         self.database_url = secrets.get(
             "DATABASE_URL", "postgresql+psycopg2://primmo:primmo@localhost:5432/primmo"
         )
+        self.rabbitmq_url = secrets.get("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
 
         self.jwt_secret = secrets.get("JWT_SECRET", "dev-jwt-secret-change-me")
         self.jwt_algorithm = secrets.get("JWT_ALGORITHM", "HS256")
         self.jwt_expire_minutes = secrets.get_int("JWT_EXPIRE_MINUTES", 720)
+
+        # Retry/recovery knobs, shared by the broker setup, the worker and the reaper.
+        self.step_max_attempts = secrets.get_int("STEP_MAX_ATTEMPTS", 5)
 
 
 @lru_cache

@@ -14,6 +14,10 @@ class Settings:
             "DATABASE_URL", "postgresql+psycopg2://primmo:primmo@localhost:5432/primmo"
         )
 
+        self.jwt_secret = secrets.get("JWT_SECRET", "dev-jwt-secret-change-me")
+        self.jwt_algorithm = secrets.get("JWT_ALGORITHM", "HS256")
+        self.jwt_expire_minutes = secrets.get_int("JWT_EXPIRE_MINUTES", 720)
+
 
 @lru_cache
 def get_settings() -> Settings:

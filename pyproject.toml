@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "primmo-docpipe"
+version = "0.1.0"
+description = "Multi-tenant document ingestion pipeline (Primmo backend test)"
+authors = ["Youssef Adarrab"]
+readme = "README.md"
+packages = [{ include = "app" }]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "^0.115"
+uvicorn = { extras = ["standard"], version = "^0.32" }
+pydantic = "^2.9"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

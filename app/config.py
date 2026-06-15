@@ -23,6 +23,9 @@ class Settings:
 
         # Retry/recovery knobs, shared by the broker setup, the worker and the reaper.
         self.step_max_attempts = secrets.get_int("STEP_MAX_ATTEMPTS", 5)
+        self.step_timeout_seconds = secrets.get_int("STEP_TIMEOUT_SECONDS", 60)
+        self.callback_sla_seconds = secrets.get_int("CALLBACK_SLA_SECONDS", 900)
+        self.reaper_interval_seconds = secrets.get_int("REAPER_INTERVAL_SECONDS", 15)
 
         self.storage_dir = secrets.get("STORAGE_DIR", "/data/storage")
 

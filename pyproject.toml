@@ -18,6 +18,13 @@ pydantic = "^2.9"
 pyjwt = "^2.9"
 python-multipart = "^0.0.12"
 
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning"]
+
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"

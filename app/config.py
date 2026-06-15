@@ -22,6 +22,8 @@ class Settings:
         # Retry/recovery knobs, shared by the broker setup, the worker and the reaper.
         self.step_max_attempts = secrets.get_int("STEP_MAX_ATTEMPTS", 5)
 
+        self.storage_dir = secrets.get("STORAGE_DIR", "/data/storage")
+
 
 @lru_cache
 def get_settings() -> Settings:

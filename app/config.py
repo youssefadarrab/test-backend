@@ -19,6 +19,8 @@ class Settings:
         self.jwt_algorithm = secrets.get("JWT_ALGORITHM", "HS256")
         self.jwt_expire_minutes = secrets.get_int("JWT_EXPIRE_MINUTES", 720)
 
+        self.partner_hmac_secret = secrets.get("PARTNER_HMAC_SECRET", "dev-partner-secret")
+
         # Retry/recovery knobs, shared by the broker setup, the worker and the reaper.
         self.step_max_attempts = secrets.get_int("STEP_MAX_ATTEMPTS", 5)
 

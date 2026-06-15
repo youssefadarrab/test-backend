@@ -26,6 +26,15 @@ class Settings:
 
         self.storage_dir = secrets.get("STORAGE_DIR", "/data/storage")
 
+    @property
+    def is_local(self) -> bool:
+        return self.env == "local"
+
+    # LISTEN/NOTIFY goes through psycopg2 directly, which wants a plain libpq DSN.
+    @property
+    def listen_dsn(self) -> str:
+        return self.database_url.replace("postgresql+psycopg2://", "postgresql://")
+
 
 @lru_cache
 def get_settings() -> Settings:

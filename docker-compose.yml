@@ -1,0 +1,71 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: primmo
+      POSTGRES_PASSWORD: primmo
+      POSTGRES_DB: primmo
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U primmo"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # One-shot: migrate + seed, then exit. Everything else waits for it.
+  init:
+    build: .
+    command: sh -c "alembic upgrade head && python -m app.seed"
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    build: .
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    env_file: .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - storage:/data/storage
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+
+  worker:
+    build: .
+    command: python -m app.worker.main
+    env_file: .env
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+
+  reaper:
+    build: .
+    command: python -m app.worker.reaper
+    env_file: .env
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+
+volumes:
+  storage:

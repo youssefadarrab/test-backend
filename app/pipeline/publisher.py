@@ -7,12 +7,12 @@ load.
 """
 from __future__ import annotations
 
-import json
 import uuid
 
 import pika
 
 from app.models import StepName
+from app.pipeline.messages import BackendStepPayload
 from app.worker.broker import connect, declare_topology, queue_name
 
 
@@ -24,7 +24,7 @@ def publish_step(document_id: uuid.UUID, step: StepName) -> None:
         channel.basic_publish(
             exchange="",
             routing_key=queue_name(step),
-            body=json.dumps({"document_id": str(document_id), "step": step.value}),
+            body=BackendStepPayload(document_id=document_id, step=step).model_dump_json(),
             properties=pika.BasicProperties(
                 delivery_mode=2,  # persistent
                 content_type="application/json",

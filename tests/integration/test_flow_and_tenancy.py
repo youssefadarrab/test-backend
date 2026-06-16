@@ -7,6 +7,7 @@ import json
 import pytest
 
 from app.pipeline.handlers import handle_step
+from app.pipeline.messages import BackendStepPayload
 from app.webhook_security import compute_signature
 
 JOB_ID = "j_flow_test_0001"
@@ -32,7 +33,7 @@ def _auth(token: str) -> dict:
 
 def _drive(db, step: str, doc_id) -> str:
     with db.session_scope() as s:
-        return handle_step(s, step, {"document_id": str(doc_id)})
+        return handle_step(s, BackendStepPayload(document_id=doc_id, step=step))
 
 
 def test_full_pipeline_to_ready(client, seeded, db, fake_publish, deterministic_steps):

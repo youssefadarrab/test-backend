@@ -5,13 +5,13 @@ an unacked message is redelivered by RabbitMQ, and the handler is idempotent.
 """
 from __future__ import annotations
 
-import json
 import logging
 import time
 
 from app.db import session_scope
 from app.models import StepName
 from app.pipeline.handlers import handle_step
+from app.pipeline.messages import BackendStepPayload
 from app.worker.broker import connect, declare_topology, queue_name
 
 logging.basicConfig(level=logging.INFO)
@@ -22,10 +22,10 @@ def _make_callback(step_value: str):
     def callback(channel, method, _properties, body) -> None:
         action = "retry"
         try:
-            payload = json.loads(body)
+            payload = BackendStepPayload.model_validate_json(body)
             with session_scope() as session:
                 try:
-                    action = handle_step(session, step_value, payload)
+                    action = handle_step(session, payload)
                 except Exception:
                     session.rollback()
                     LOGGER.exception("handler crashed for step %s", step_value)

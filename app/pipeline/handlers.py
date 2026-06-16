@@ -21,6 +21,7 @@ from app.config import get_settings
 from app.events.notify import emit_event
 from app.models import Document, DocumentStatus, PipelineStep, StepName, StepStatus
 from app.pipeline import steps as step_fns
+from app.pipeline.messages import BackendStepPayload
 from app.pipeline.transition import recompute_document_status, trigger_successors
 
 settings = get_settings()
@@ -59,9 +60,9 @@ def _run(step: StepName, by_name: dict[str, PipelineStep], document_id: uuid.UUI
     raise ValueError(f"unknown step {step}")  # pragma: no cover
 
 
-def handle_step(session: Session, step_name: str, payload: dict) -> str:
-    document_id = uuid.UUID(payload["document_id"])
-    step = StepName(step_name)
+def handle_step(session: Session, payload: BackendStepPayload) -> str:
+    document_id = payload.document_id
+    step = payload.step
 
     by_name = _load_steps(session, document_id)
     row = by_name.get(step.value)

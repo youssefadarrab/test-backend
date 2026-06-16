@@ -45,14 +45,24 @@ class DocumentListItem(BaseModel):
     created_at: datetime
 
 
+class ExtractedData(BaseModel):
+    """The pipeline's aggregated output, returned once a document is `ready`."""
+
+    ocr_text: str | None = None
+    metadata: dict[str, Any] | None = None
+    chunks: list[str] | None = None
+    external_job_id: str | None = None
+    partner_result: dict[str, Any] | None = None
+
+
 class DocumentDetail(BaseModel):
     id: uuid.UUID
     filename: str
     uploaded_by: str
     status: str
     steps: list[StepOut]
-    # Aggregated extracted data, present only once the document is `ready`.
-    data: dict[str, Any] | None = None
+    # Present only once the document is `ready`.
+    data: ExtractedData | None = None
 
 
 class WebhookPayload(BaseModel):

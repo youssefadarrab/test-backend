@@ -16,7 +16,7 @@ from app.config import get_settings
 from app.models import AppUser, Document, DocumentStatus, PipelineStep, StepName, StepStatus
 from app.pipeline.dag import PIPELINE
 from app.pipeline.publisher import publish_step
-from app.schemas import DocumentCreated, DocumentDetail, DocumentListItem, StepOut
+from app.schemas import DocumentCreated, DocumentDetail, DocumentListItem, ExtractedData, StepOut
 
 settings = get_settings()
 
@@ -77,16 +77,16 @@ def list_documents(session: Session, org_id: uuid.UUID) -> list[DocumentListItem
     ]
 
 
-def _extracted_data(steps: dict[str, PipelineStep]) -> dict:
+def _extracted_data(steps: dict[str, PipelineStep]) -> ExtractedData:
     ocr = steps[StepName.OCR.value].result or {}
     ext = steps[StepName.EXTERNAL_CALL.value]
-    return {
-        "ocr_text": ocr.get("text"),
-        "metadata": steps[StepName.METADATA.value].result,
-        "chunks": (steps[StepName.CHUNKING.value].result or {}).get("chunks"),
-        "external_job_id": ext.external_job_id,
-        "partner_result": ext.result,
-    }
+    return ExtractedData(
+        ocr_text=ocr.get("text"),
+        metadata=steps[StepName.METADATA.value].result,
+        chunks=(steps[StepName.CHUNKING.value].result or {}).get("chunks"),
+        external_job_id=ext.external_job_id,
+        partner_result=ext.result,
+    )
 
 
 def get_document_detail(

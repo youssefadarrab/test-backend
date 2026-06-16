@@ -1,16 +1,17 @@
 from __future__ import annotations
 
 import asyncio
-import logging
+import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 
 from app.api import auth, dev, documents, events, webhooks
 from app.config import get_settings
 from app.events.notify import broker
+from app.observability import configure_logging, set_trace_id
 
-logging.basicConfig(level=logging.INFO)
+configure_logging()
 settings = get_settings()
 
 
@@ -25,6 +26,13 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Primmo Document Pipeline", version="0.1.0", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def add_trace_id(request: Request, call_next):
+    set_trace_id(uuid.uuid4().hex)
+    return await call_next(request)
+
 
 API_V1 = "/v1/docpipe"
 

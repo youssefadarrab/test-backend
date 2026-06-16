@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 import time
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
@@ -26,12 +27,12 @@ from app.config import get_settings
 from app.db import session_scope
 from app.events.notify import emit_event
 from app.models import PipelineStep, StepName, StepStatus
+from app.observability import configure_logging, set_trace_id
 from app.pipeline.publisher import publish_step
 from app.pipeline.transition import recompute_document_status
 
 settings = get_settings()
-logging.basicConfig(level=logging.INFO)
-LOGGER = logging.getLogger("app.worker.reaper")
+LOGGER = logging.getLogger("app.reaper")
 
 
 def _fail(session: Session, step: PipelineStep, reason: str) -> None:
@@ -54,10 +55,17 @@ def run_once(session: Session) -> int:
     )
     for step in stale:
         if step.attempts >= settings.step_max_attempts:
+            LOGGER.error(
+                "step failed permanently (reaped)",
+                extra={"document_id": str(step.document_id), "step": step.name, "attempt": step.attempts},
+            )
             _fail(session, step, "exhausted retries (reaped)")
             acted += 1
         elif step.status == StepStatus.QUEUED.value:
-            LOGGER.info("re-publishing stale queued step %s/%s", step.document_id, step.name)
+            LOGGER.info(
+                "re-queuing stale step",
+                extra={"document_id": str(step.document_id), "step": step.name},
+            )
             publish_step(step.document_id, StepName(step.name))
             acted += 1
         # RUNNING: leave to broker redelivery.
@@ -69,7 +77,10 @@ def run_once(session: Session) -> int:
         session, [StepStatus.AWAITING_CALLBACK.value], callback_cutoff
     )
     for step in stuck:
-        LOGGER.info("partner callback timed out for %s", step.document_id)
+        LOGGER.warning(
+            "partner callback timed out",
+            extra={"document_id": str(step.document_id), "step": step.name},
+        )
         _fail(session, step, "partner callback timeout")
         acted += 1
 
@@ -77,8 +88,10 @@ def run_once(session: Session) -> int:
 
 
 def main() -> None:
-    LOGGER.info("reaper started (interval=%ss)", settings.reaper_interval_seconds)
+    configure_logging()
+    LOGGER.info("reaper started", extra={"interval_seconds": settings.reaper_interval_seconds})
     while True:
+        set_trace_id(uuid.uuid4().hex)
         try:
             with session_scope() as session:
                 run_once(session)

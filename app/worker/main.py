@@ -7,19 +7,21 @@ from __future__ import annotations
 
 import logging
 import time
+import uuid
 
 from app.db import session_scope
 from app.models import StepName
+from app.observability import configure_logging, set_trace_id
 from app.pipeline.handlers import handle_step
 from app.pipeline.messages import BackendStepPayload
 from app.worker.broker import connect, declare_topology, queue_name
 
-logging.basicConfig(level=logging.INFO)
-LOGGER = logging.getLogger("app.worker.main")
+LOGGER = logging.getLogger("app.worker")
 
 
 def _make_callback(step_value: str):
     def callback(channel, method, _properties, body) -> None:
+        set_trace_id(uuid.uuid4().hex)
         action = "retry"
         try:
             payload = BackendStepPayload.model_validate_json(body)
@@ -28,10 +30,13 @@ def _make_callback(step_value: str):
                     action = handle_step(session, payload)
                 except Exception:
                     session.rollback()
-                    LOGGER.exception("handler crashed for step %s", step_value)
+                    LOGGER.exception(
+                        "handler crashed",
+                        extra={"document_id": str(payload.document_id), "step": payload.step.value},
+                    )
                     action = "retry"
         except Exception:
-            LOGGER.exception("bad message on %s: %r", step_value, body)
+            LOGGER.exception("unparseable message dropped", extra={"queue": step_value})
             action = "ack"  # unparseable: drop it, don't poison the queue
 
         if action == "ack":
@@ -43,6 +48,7 @@ def _make_callback(step_value: str):
 
 
 def main() -> None:
+    configure_logging()
     while True:
         try:
             conn = connect()
@@ -54,7 +60,7 @@ def main() -> None:
             LOGGER.info("worker waiting for messages")
             channel.start_consuming()
         except Exception:
-            LOGGER.exception("worker connection lost; reconnecting in 3s")
+            LOGGER.exception("broker connection lost, reconnecting", extra={"retry_seconds": 3})
             time.sleep(3)
 
 

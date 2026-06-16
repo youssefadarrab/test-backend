@@ -25,7 +25,7 @@ from app.pipeline.messages import BackendStepPayload
 from app.pipeline.transition import recompute_document_status, trigger_successors
 
 settings = get_settings()
-LOGGER = logging.getLogger("app.worker")
+LOGGER = logging.getLogger("app.handlers")
 
 # Statuses from which there is no point (re)running a step.
 _TERMINAL_FOR_RUN = {StepStatus.DONE.value, StepStatus.AWAITING_CALLBACK.value, StepStatus.ERROR.value}
@@ -103,6 +103,10 @@ def _on_success(
             {"step": step.value, "status": StepStatus.AWAITING_CALLBACK.value},
         )
         session.commit()
+        LOGGER.info(
+            "external call sent, awaiting callback",
+            extra={"document_id": str(document_id), "step": step.value, "job_id": row.external_job_id},
+        )
         # No successors; document stays processing until the webhook arrives.
         return "ack"
 
@@ -111,6 +115,7 @@ def _on_success(
     row.finished_at = _now()
     emit_event(session, document_id, {"step": step.value, "status": StepStatus.DONE.value})
     session.commit()
+    LOGGER.info("step done", extra={"document_id": str(document_id), "step": step.value})
 
     trigger_successors(session, document_id)
     recompute_document_status(session, document_id)
@@ -122,7 +127,7 @@ def _on_failure(
 ) -> str:
     row.attempts += 1
     error = f"{type(exc).__name__}: {exc}"
-    LOGGER.warning("step %s failed (attempt %s): %s", row.name, row.attempts, error)
+    context = {"document_id": str(document_id), "step": row.name, "attempt": row.attempts, "error": error}
 
     if row.attempts >= settings.step_max_attempts:
         row.status = StepStatus.ERROR.value
@@ -130,8 +135,11 @@ def _on_failure(
         row.finished_at = _now()
         emit_event(session, document_id, {"step": row.name, "status": StepStatus.ERROR.value})
         session.commit()
+        LOGGER.error("step failed permanently", extra=context)
         recompute_document_status(session, document_id)  # -> failed
         return "ack"
+
+    LOGGER.warning("step failed, will retry", extra=context)
 
     # Not exhausted: hand it back to the broker for redelivery.
     row.status = StepStatus.QUEUED.value

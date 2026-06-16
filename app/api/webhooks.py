@@ -27,6 +27,7 @@ async def partner_webhook(
     raw = await request.body()
     signature_ok = verify_signature(raw, x_partner_signature)
     if not signature_ok:
+        LOGGER.warning("webhook rejected: invalid signature")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="bad signature")
 
     try:
@@ -49,10 +50,15 @@ async def partner_webhook(
         step = transactions.get_step_by_job_id(session, payload.job_id)
         if step is None:
             # Unknown job_id: nothing to act on. 202 keeps us opaque to probers.
+            LOGGER.info("webhook for unknown job_id", extra={"job_id": payload.job_id})
             return {"status": "accepted"}
 
         # 4. Idempotency: a terminal step ignores repeats.
         if step.status in (StepStatus.DONE.value, StepStatus.ERROR.value):
+            LOGGER.info(
+                "webhook ignored (already terminal)",
+                extra={"job_id": payload.job_id, "document_id": str(step.document_id)},
+            )
             return {"status": "duplicate-ignored"}
 
         if payload.status == "completed":
@@ -76,5 +82,14 @@ async def partner_webhook(
         session.commit()
 
         new_status = recompute_document_status(session, step.document_id)
+        LOGGER.info(
+            "webhook processed",
+            extra={
+                "job_id": payload.job_id,
+                "document_id": str(step.document_id),
+                "partner_status": payload.status,
+                "document_status": new_status,
+            },
+        )
 
     return {"status": "processed", "document_status": new_status}

@@ -80,7 +80,7 @@ class PublishRecorder:
 @pytest.fixture
 def fake_publish(monkeypatch) -> PublishRecorder:
     recorder = PublishRecorder()
-    for mod in ("app.pipeline.transition", "app.api.documents", "app.worker.reaper"):
+    for mod in ("app.pipeline.transition", "app.api.routes_impl.documents", "app.worker.reaper"):
         monkeypatch.setattr(f"{mod}.publish_step", recorder, raising=True)
     return recorder
 
@@ -114,11 +114,11 @@ def seeded(db):
 def client(db, no_listener, tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
 
-    import app.api.documents as documents
+    import app.config
     import app.main as main
 
     # Uploads go to a writable temp dir (the prod default /data/storage is a volume).
-    monkeypatch.setattr(documents.settings, "storage_dir", str(tmp_path / "storage"))
+    monkeypatch.setattr(app.config.get_settings(), "storage_dir", str(tmp_path / "storage"))
 
     with TestClient(main.app) as c:
         yield c

@@ -31,6 +31,12 @@ def step_status_map(session: Session, document_id: uuid.UUID) -> dict[str, str]:
     return {name: status for name, status in rows}
 
 
+def get_user_by_email(session: Session, email: str) -> AppUser | None:
+    return session.execute(
+        select(AppUser).where(AppUser.email == email)
+    ).scalar_one_or_none()
+
+
 def get_step_by_job_id(session: Session, job_id: str) -> PipelineStep | None:
     return session.execute(
         select(PipelineStep).where(PipelineStep.external_job_id == job_id)

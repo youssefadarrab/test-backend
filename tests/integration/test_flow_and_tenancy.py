@@ -21,7 +21,7 @@ def deterministic_steps(monkeypatch):
 
 
 def _token(client, email: str) -> str:
-    resp = client.post("/auth/login", json={"email": email})
+    resp = client.post("/v1/docpipe/auth/login", json={"email": email})
     assert resp.status_code == 200
     return resp.json()["access_token"]
 
@@ -40,7 +40,7 @@ def test_full_pipeline_to_ready(client, seeded, db, fake_publish, deterministic_
 
     # Upload
     resp = client.post(
-        "/documents",
+        "/v1/docpipe/documents",
         files={"file": ("contract.pdf", b"%PDF-bytes", "application/pdf")},
         headers=_auth(token),
     )
@@ -55,7 +55,7 @@ def test_full_pipeline_to_ready(client, seeded, db, fake_publish, deterministic_
     assert _drive(db, "external_call", doc_id) == "ack"
 
     # external_call sent -> awaiting the webhook; still processing.
-    detail = client.get(f"/documents/{doc_id}", headers=_auth(token)).json()
+    detail = client.get(f"/v1/docpipe/documents/{doc_id}", headers=_auth(token)).json()
     assert detail["status"] == "processing"
     ext = next(s for s in detail["steps"] if s["name"] == "external_call")
     assert ext["status"] == "awaiting_callback"
@@ -67,13 +67,13 @@ def test_full_pipeline_to_ready(client, seeded, db, fake_publish, deterministic_
         {"job_id": JOB_ID, "status": "completed", "result": {"indexed_at": "2026-05-21T14:23:11Z"}}
     ).encode()
     wh = client.post(
-        "/webhooks/partner",
+        "/v1/docpipe/webhooks/partner",
         content=body,
         headers={"Content-Type": "application/json", "X-Partner-Signature": compute_signature(body)},
     )
     assert wh.status_code == 200
 
-    detail = client.get(f"/documents/{doc_id}", headers=_auth(token)).json()
+    detail = client.get(f"/v1/docpipe/documents/{doc_id}", headers=_auth(token)).json()
     assert detail["status"] == "ready"
     assert detail["data"]["ocr_text"] == "lorem ipsum..."
     assert detail["data"]["metadata"] == {"doc_type": "fake_type"}
@@ -86,17 +86,17 @@ def test_tenant_isolation(client, seeded, db, fake_publish, deterministic_steps)
     youssef = _token(client, "youssef@globex.example")
 
     resp = client.post(
-        "/documents",
+        "/v1/docpipe/documents",
         files={"file": ("a.pdf", b"x", "application/pdf")},
         headers=_auth(alice),
     )
     doc_id = resp.json()["id"]
 
     # Bob (other org) cannot see Alice's document -> 404, not 403 (no existence leak).
-    assert client.get(f"/documents/{doc_id}", headers=_auth(youssef)).status_code == 404
-    assert client.get("/documents", headers=_auth(youssef)).json() == []
-    assert len(client.get("/documents", headers=_auth(alice)).json()) == 1
+    assert client.get(f"/v1/docpipe/documents/{doc_id}", headers=_auth(youssef)).status_code == 404
+    assert client.get("/v1/docpipe/documents", headers=_auth(youssef)).json() == []
+    assert len(client.get("/v1/docpipe/documents", headers=_auth(alice)).json()) == 1
 
 
 def test_auth_required(client, seeded):
-    assert client.get("/documents").status_code in (401, 403)
+    assert client.get("/v1/docpipe/documents").status_code in (401, 403)

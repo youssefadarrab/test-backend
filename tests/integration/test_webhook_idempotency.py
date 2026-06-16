@@ -15,7 +15,7 @@ def _post(client, body: dict, sig: str | None = None):
     raw = json.dumps(body).encode()
     signature = sig if sig is not None else compute_signature(raw)
     return client.post(
-        "/webhooks/partner",
+        "/v1/docpipe/webhooks/partner",
         content=raw,
         headers={"Content-Type": "application/json", "X-Partner-Signature": signature},
     )

@@ -26,16 +26,19 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Primmo Document Pipeline", version="0.1.0", lifespan=lifespan)
 
-app.include_router(auth.router)
-app.include_router(documents.router)
-app.include_router(events.router)
-app.include_router(webhooks.router)
+API_V1 = "/v1/docpipe"
+
+app.include_router(auth.router, prefix=API_V1)
+app.include_router(documents.router, prefix=API_V1)
+app.include_router(events.router, prefix=API_V1)
+app.include_router(webhooks.router, prefix=API_V1)
 
 # Local-only signature helper; mounted only when ENV=local.
 if settings.is_local:
-    app.include_router(dev.router)
+    app.include_router(dev.router, prefix=API_V1)
 
 
+# Health stays unversioned: it's for infra purposes, not API clients.
 @app.get("/healthz", tags=["meta"])
 def healthz() -> dict:
     return {"status": "ok"}

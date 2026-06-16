@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from enum import auto
+from enum import StrEnum, auto
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -70,6 +70,17 @@ class WebhookPayload(BaseModel):
     status: WebhookStatus
     result: dict[str, Any] = Field(default_factory=dict)
     occurred_at: datetime | None = None
+
+
+class WebhookOutcome(StrEnum):
+    ACCEPTED = "accepted"            # unknown job_id, nothing to do
+    DUPLICATE_IGNORED = "duplicate-ignored"  # already-terminal step
+    PROCESSED = "processed"
+
+
+class WebhookResponse(BaseModel):
+    status: WebhookOutcome
+    document_status: str | None = None
 
 
 class SignWebhookResponse(BaseModel):

@@ -16,13 +16,13 @@ from app import transactions
 from app.events.notify import emit_event, step_event
 from app.models import StepName, StepStatus, WebhookEvent
 from app.pipeline.transition import Transitioner
-from app.schemas import WebhookPayload, WebhookStatus
+from app.schemas import WebhookOutcome, WebhookPayload, WebhookResponse, WebhookStatus
 
 LOGGER = logging.getLogger("app.webhooks")
 _transitioner = Transitioner()
 
 
-def apply_partner_result(session: Session, raw: bytes, payload: WebhookPayload) -> dict:
+def apply_partner_result(session: Session, raw: bytes, payload: WebhookPayload) -> WebhookResponse:
     # Record durably (audit + idempotency), then process.
     session.add(WebhookEvent(job_id=payload.job_id, signature_ok=True, payload=json.loads(raw)))
     session.commit()
@@ -32,7 +32,7 @@ def apply_partner_result(session: Session, raw: bytes, payload: WebhookPayload) 
     if step is None:
         # Unknown job_id: nothing to act on. Opaque to probers.
         LOGGER.info("webhook for unknown job_id", extra={"job_id": payload.job_id})
-        return {"status": "accepted"}
+        return WebhookResponse(status=WebhookOutcome.ACCEPTED)
 
     # Idempotency: a terminal step ignores repeats.
     if step.status in (StepStatus.DONE.value, StepStatus.ERROR.value):
@@ -40,7 +40,7 @@ def apply_partner_result(session: Session, raw: bytes, payload: WebhookPayload) 
             "webhook ignored (already terminal)",
             extra={"job_id": payload.job_id, "document_id": str(step.document_id)},
         )
-        return {"status": "duplicate-ignored"}
+        return WebhookResponse(status=WebhookOutcome.DUPLICATE_IGNORED)
 
     step.finished_at = datetime.now(timezone.utc)
     if payload.status == WebhookStatus.COMPLETED:
@@ -63,4 +63,4 @@ def apply_partner_result(session: Session, raw: bytes, payload: WebhookPayload) 
             "document_status": new_status,
         },
     )
-    return {"status": "processed", "document_status": new_status}
+    return WebhookResponse(status=WebhookOutcome.PROCESSED, document_status=new_status)

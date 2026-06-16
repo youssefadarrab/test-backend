@@ -11,7 +11,7 @@ from app.auth import get_current_user
 from app.config import get_settings
 from app.db import get_db
 from app.models import AppUser, Document, DocumentStatus, PipelineStep, StepName, StepStatus
-from app.pipeline.dag import ALL_STEPS, ENTRY_STEPS
+from app.pipeline.dag import PIPELINE
 from app.pipeline.publisher import publish_step
 from app.schemas import DocumentCreated, DocumentDetail, DocumentListItem, StepOut
 
@@ -48,20 +48,20 @@ def upload_document(
     document.storage_uri = _store_bytes(user.org_id, document.id, file.file.read())
 
     # Create all step rows up front; the entry step(s) start QUEUED, the rest PENDING.
-    for step in ALL_STEPS:
-        start = step in ENTRY_STEPS
+    entry = set(PIPELINE.entry_nodes)
+    for step in PIPELINE.nodes:
         db.add(
             PipelineStep(
                 document_id=document.id,
                 name=step.value,
-                status=StepStatus.QUEUED.value if start else StepStatus.PENDING.value,
+                status=StepStatus.QUEUED.value if step in entry else StepStatus.PENDING.value,
             )
         )
     db.commit()
 
     # Commit-then-publish: the entry step is already QUEUED in the DB; the reaper
     # would re-publish it if this publish were lost.
-    for step in ENTRY_STEPS:
+    for step in PIPELINE.entry_nodes:
         publish_step(document.id, step)
 
     return DocumentCreated(id=document.id, status=document.status)

@@ -17,14 +17,14 @@ def test_concurrent_fan_in_triggers_external_call_exactly_once(db, seeded, fake_
 
     barrier = threading.Barrier(2)
 
-    def finisher(step: StepName):
+    def finisher():
         # Each finisher uses its own session, like two separate workers.
         with db.session_scope() as s:
             barrier.wait()  # maximise the race
-            trigger_successors(s, doc_id, step)
+            trigger_successors(s, doc_id)
 
-    t1 = threading.Thread(target=finisher, args=(StepName.METADATA,))
-    t2 = threading.Thread(target=finisher, args=(StepName.CHUNKING,))
+    t1 = threading.Thread(target=finisher)
+    t2 = threading.Thread(target=finisher)
     t1.start()
     t2.start()
     t1.join()
@@ -49,6 +49,6 @@ def test_fan_in_waits_for_both_predecessors(db, seeded, fake_publish):
         db, seeded["acme"], seeded["alice"], chunking=StepStatus.RUNNING
     )
     with db.session_scope() as s:
-        trigger_successors(s, doc_id, StepName.METADATA)
+        trigger_successors(s, doc_id)
 
     assert [c for c in fake_publish.calls if c[1] is StepName.EXTERNAL_CALL] == []

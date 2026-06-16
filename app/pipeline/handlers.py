@@ -111,7 +111,7 @@ def _on_success(
     emit_event(session, document_id, {"step": step.value, "status": StepStatus.DONE.value})
     session.commit()
 
-    trigger_successors(session, document_id, step)
+    trigger_successors(session, document_id)
     recompute_document_status(session, document_id)
     return "ack"
 

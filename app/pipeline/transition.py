@@ -15,12 +15,8 @@ from sqlalchemy.orm import Session
 from app import transactions
 from app.events.notify import emit_event
 from app.models import Document, DocumentStatus, StepName, StepStatus
-from app.pipeline.dag import predecessors_of, successors_of
+from app.pipeline.dag import PIPELINE
 from app.pipeline.publisher import publish_step
-
-
-def _all_predecessors_done(statuses: dict[str, str], step: StepName) -> bool:
-    return all(statuses.get(p.value) == StepStatus.DONE.value for p in predecessors_of(step))
 
 
 def claim_step(session: Session, document_id: uuid.UUID, step: StepName) -> bool:
@@ -34,14 +30,15 @@ def claim_step(session: Session, document_id: uuid.UUID, step: StepName) -> bool
     return claimed
 
 
-def trigger_successors(session: Session, document_id: uuid.UUID, completed: StepName) -> None:
-    """For each successor of a just-completed step, publish it iff all its
-    predecessors are DONE. Commit-then-publish (the claim commits first)."""
+def trigger_successors(session: Session, document_id: uuid.UUID) -> None:
+    """Publish every step that has become ready (all predecessors DONE).
+    Commit-then-publish (the claim commits first), the claim is the exactly-once
+    guard, so re-evaluating already-queued steps is harmless."""
     statuses = transactions.step_status_map(session, document_id)
-    for succ in successors_of(completed):
-        if _all_predecessors_done(statuses, succ):
-            if claim_step(session, document_id, succ):
-                publish_step(document_id, succ)
+    done = {StepName(name) for name, status in statuses.items() if status == StepStatus.DONE.value}
+    for step in PIPELINE.ready_successors(done):
+        if claim_step(session, document_id, step):
+            publish_step(document_id, step)
 
 
 def derive_document_status(statuses: dict[str, str]) -> str:

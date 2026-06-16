@@ -7,7 +7,7 @@ import threading
 from sqlalchemy import select
 
 from app.models import PipelineStep, StepName, StepStatus
-from app.pipeline.transition import trigger_successors
+from app.pipeline.transition import Transitioner
 from tests.helpers import create_document
 
 
@@ -21,7 +21,7 @@ def test_concurrent_fan_in_triggers_external_call_exactly_once(db, seeded, fake_
         # Each finisher uses its own session, like two separate workers.
         with db.session_scope() as s:
             barrier.wait()  # maximise the race
-            trigger_successors(s, doc_id)
+            Transitioner().trigger_successors(s, doc_id)
 
     t1 = threading.Thread(target=finisher)
     t2 = threading.Thread(target=finisher)
@@ -49,6 +49,6 @@ def test_fan_in_waits_for_both_predecessors(db, seeded, fake_publish):
         db, seeded["acme"], seeded["alice"], chunking=StepStatus.RUNNING
     )
     with db.session_scope() as s:
-        trigger_successors(s, doc_id)
+        Transitioner().trigger_successors(s, doc_id)
 
     assert [c for c in fake_publish.calls if c[1] is StepName.EXTERNAL_CALL] == []

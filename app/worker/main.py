@@ -12,7 +12,7 @@ import uuid
 from app.db import session_scope
 from app.models import StepName
 from app.observability import configure_logging, set_trace_id
-from app.pipeline.handlers import handle_step
+from app.pipeline.handlers import STEP_HANDLERS
 from app.pipeline.messages import BackendStepPayload
 from app.worker.broker import connect, declare_topology, queue_name
 
@@ -27,7 +27,7 @@ def _make_callback(step_value: str):
             payload = BackendStepPayload.model_validate_json(body)
             with session_scope() as session:
                 try:
-                    action = handle_step(session, payload)
+                    action = STEP_HANDLERS[payload.step].handle(session, payload)
                 except Exception:
                     session.rollback()
                     LOGGER.exception(

@@ -10,12 +10,13 @@ from app import transactions
 from app.db import session_scope
 from app.events.notify import emit_event
 from app.models import StepName, StepStatus, WebhookEvent
-from app.pipeline.transition import recompute_document_status
+from app.pipeline.transition import Transitioner
 from app.schemas import WebhookPayload
 from app.webhook_security import verify_signature
 
 LOGGER = logging.getLogger("app.webhooks")
 router = APIRouter(tags=["webhooks"])
+_transitioner = Transitioner()
 
 
 @router.post("/webhooks/partner")
@@ -81,7 +82,7 @@ async def partner_webhook(
             )
         session.commit()
 
-        new_status = recompute_document_status(session, step.document_id)
+        new_status = _transitioner.recompute_document_status(session, step.document_id)
         LOGGER.info(
             "webhook processed",
             extra={

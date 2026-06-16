@@ -29,10 +29,11 @@ from app.events.notify import emit_event
 from app.models import PipelineStep, StepName, StepStatus
 from app.observability import configure_logging, set_trace_id
 from app.pipeline.publisher import publish_step
-from app.pipeline.transition import recompute_document_status
+from app.pipeline.transition import Transitioner
 
 settings = get_settings()
 LOGGER = logging.getLogger("app.reaper")
+_TRANSITIONER = Transitioner()
 
 
 def _fail(session: Session, step: PipelineStep, reason: str) -> None:
@@ -41,7 +42,7 @@ def _fail(session: Session, step: PipelineStep, reason: str) -> None:
     step.finished_at = datetime.now(timezone.utc)
     emit_event(session, step.document_id, {"step": step.name, "status": StepStatus.ERROR.value})
     session.commit()
-    recompute_document_status(session, step.document_id)
+    _TRANSITIONER.recompute_document_status(session, step.document_id)
 
 
 def run_once(session: Session) -> int:

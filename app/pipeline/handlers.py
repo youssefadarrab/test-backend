@@ -95,7 +95,7 @@ class StepHandler(ABC):
         if row is None:  # pragma: no cover - message for a deleted document
             return HandlerAction.ACK
 
-        # Idempotency: nothing to do for an already-finished step, or a failed doc.
+        # Idempotency: nothing to do for an already-finished step, or a failed document.
         if row.status in _TERMINAL_FOR_RUN:
             return HandlerAction.ACK
         document = session.get(Document, document_id)
@@ -111,8 +111,8 @@ class StepHandler(ABC):
         try:
             step_input = self.transform_input(self.load_input(by_name))
             output = self.transform_output(self.execute(step_input))
-        except Exception as exc:  # the mocks raise ~1/3 of the time
-            return self._on_failure(session, document_id, row, exc)
+        except Exception as exception:  # the mocks raise ~1/3 of the time
+            return self._on_failure(session, document_id, row, exception)
 
         self.save_output(session, document_id, row, output)
         # DONE fans out; AWAITING_CALLBACK (external_call) waits for the webhook.
@@ -126,13 +126,13 @@ class StepHandler(ABC):
         rows = session.execute(
             select(PipelineStep).where(PipelineStep.document_id == document_id)
         ).scalars()
-        return {s.name: s for s in rows}
+        return {step.name: step for step in rows}
 
     def _on_failure(
-        self, session: Session, document_id: uuid.UUID, row: PipelineStep, exc: Exception
+        self, session: Session, document_id: uuid.UUID, row: PipelineStep, exception: Exception
     ) -> HandlerAction:
         row.attempts += 1
-        error = f"{type(exc).__name__}: {exc}"
+        error = f"{type(exception).__name__}: {exception}"
         context = {"document_id": str(document_id), "step": row.name, "attempt": row.attempts, "error": error}
 
         if row.attempts >= settings.step_max_attempts:

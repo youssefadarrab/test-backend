@@ -30,16 +30,16 @@ class _ContextFilter(logging.Filter):
 class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         out = {
-            "ts": self.formatTime(record),
+            "timestamp": self.formatTime(record),
             "level": record.levelname,
             "logger": record.name,
-            "msg": record.getMessage(),
+            "message": record.getMessage(),
         }
         for key, value in record.__dict__.items():
             if key not in _RESERVED and not key.startswith("_") and value is not None:
                 out[key] = value
         if record.exc_info:
-            out["exc"] = self.formatException(record.exc_info)
+            out["exception"] = self.formatException(record.exc_info)
         return json.dumps(out, default=str)
 
 

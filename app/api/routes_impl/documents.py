@@ -26,8 +26,8 @@ def _store_bytes(org_id: uuid.UUID, document_id: uuid.UUID, data: bytes) -> str:
     folder = os.path.join(settings.storage_dir, str(org_id))
     os.makedirs(folder, exist_ok=True)
     path = os.path.join(folder, str(document_id))
-    with open(path, "wb") as fh:
-        fh.write(data)
+    with open(path, "wb") as file_handle:
+        file_handle.write(data)
     return path
 
 
@@ -67,25 +67,25 @@ def create_document(session: Session, user: AppUser, filename: str, data: bytes)
 def list_documents(session: Session, org_id: uuid.UUID) -> list[DocumentListItem]:
     return [
         DocumentListItem(
-            id=doc.id,
-            filename=doc.filename,
+            id=document.id,
+            filename=document.filename,
             uploaded_by=email,
-            status=doc.status,
-            created_at=doc.created_at,
+            status=document.status,
+            created_at=document.created_at,
         )
-        for doc, email in transactions.list_org_documents(session, org_id)
+        for document, email in transactions.list_org_documents(session, org_id)
     ]
 
 
 def _extracted_data(steps: dict[str, PipelineStep]) -> ExtractedData:
-    ocr = steps[StepName.OCR.value].result or {}
-    ext = steps[StepName.EXTERNAL_CALL.value]
+    ocr_result = steps[StepName.OCR.value].result or {}
+    external_step = steps[StepName.EXTERNAL_CALL.value]
     return ExtractedData(
-        ocr_text=ocr.get("text"),
+        ocr_text=ocr_result.get("text"),
         metadata=steps[StepName.METADATA.value].result,
         chunks=(steps[StepName.CHUNKING.value].result or {}).get("chunks"),
-        external_job_id=ext.external_job_id,
-        partner_result=ext.result,
+        external_job_id=external_step.external_job_id,
+        partner_result=external_step.result,
     )
 
 
@@ -98,7 +98,7 @@ def get_document_detail(
     if document is None or document.org_id != org_id:
         return None
 
-    steps = {s.name: s for s in document.steps}
+    steps = {step.name: step for step in document.steps}
     data = _extracted_data(steps) if document.status == DocumentStatus.READY.value else None
 
     return DocumentDetail(
@@ -108,13 +108,13 @@ def get_document_detail(
         status=document.status,
         steps=[
             StepOut(
-                name=s.name,
-                status=s.status,
-                attempts=s.attempts,
-                error_text=s.error_text,
-                external_job_id=s.external_job_id,
+                name=step.name,
+                status=step.status,
+                attempts=step.attempts,
+                error_text=step.error_text,
+                external_job_id=step.external_job_id,
             )
-            for s in document.steps
+            for step in document.steps
         ],
         data=data,
     )

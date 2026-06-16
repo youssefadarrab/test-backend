@@ -17,9 +17,9 @@ from app.worker.broker import connect, declare_topology, queue_name
 
 
 def publish_step(document_id: uuid.UUID, step: StepName) -> None:
-    conn = connect()
+    connection = connect()
     try:
-        channel = conn.channel()
+        channel = connection.channel()
         declare_topology(channel)
         channel.basic_publish(
             exchange="",
@@ -31,4 +31,4 @@ def publish_step(document_id: uuid.UUID, step: StepName) -> None:
             ),
         )
     finally:
-        conn.close()
+        connection.close()

@@ -51,8 +51,8 @@ def main() -> None:
     configure_logging()
     while True:
         try:
-            conn = connect()
-            channel = conn.channel()
+            connection = connect()
+            channel = connection.channel()
             declare_topology(channel)
             channel.basic_qos(prefetch_count=1)
             for step in StepName:

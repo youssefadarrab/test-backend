@@ -26,20 +26,20 @@ class Base(DeclarativeBase):
     pass
 
 
-def get_db() -> Iterator[Session]:
+def get_session() -> Iterator[Session]:
     """FastAPI dependency: one session per request, always closed."""
-    db = SessionLocal()
+    session = SessionLocal()
     try:
-        yield db
+        yield session
     finally:
-        db.close()
+        session.close()
 
 
 @contextmanager
 def session_scope() -> Iterator[Session]:
     """Used by workers/reaper outside the request lifecycle."""
-    db = SessionLocal()
+    session = SessionLocal()
     try:
-        yield db
+        yield session
     finally:
-        db.close()
+        session.close()

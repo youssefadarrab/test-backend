@@ -30,11 +30,13 @@ def _sse(payload: dict) -> str:
 
 def _load_snapshot(document_id: uuid.UUID, org_id: uuid.UUID) -> dict | None:
     """Sync DB read (runs in a thread). Returns None if not found / wrong tenant."""
-    with session_scope() as db:
-        doc = db.get(Document, document_id)
-        if doc is None or doc.org_id != org_id:
+    with session_scope() as session:
+        document = session.get(Document, document_id)
+        if document is None or document.org_id != org_id:
             return None
-        return snapshot_event(str(doc.id), doc.status, {s.name: s.status for s in doc.steps})
+        return snapshot_event(
+            str(document.id), document.status, {step.name: step.status for step in document.steps}
+        )
 
 
 @router.get("/documents/{document_id}/events")

@@ -11,7 +11,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.db import get_db
+from app.db import get_session
 from app.models import AppUser
 
 settings = get_settings()
@@ -31,12 +31,12 @@ def create_access_token(user: AppUser) -> str:
 
 
 def get_current_user(
-    creds: HTTPAuthorizationCredentials = Depends(_bearer),
-    db: Session = Depends(get_db),
+    credentials: HTTPAuthorizationCredentials = Depends(_bearer),
+    session: Session = Depends(get_session),
 ) -> AppUser:
     try:
         claims = jwt.decode(
-            creds.credentials,
+            credentials.credentials,
             settings.jwt_secret,
             algorithms=[settings.jwt_algorithm],
             leeway=settings.jwt_leeway_seconds,
@@ -45,7 +45,7 @@ def get_current_user(
     except (jwt.PyJWTError, KeyError, ValueError):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid token")
 
-    user = db.get(AppUser, user_id)
+    user = session.get(AppUser, user_id)
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="unknown user")
     return user

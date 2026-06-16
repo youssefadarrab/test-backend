@@ -15,8 +15,8 @@ def test_core_fields_are_emitted():
     out = json.loads(JsonFormatter().format(_record()))
     assert out["level"] == "INFO"
     assert out["logger"] == "app.test"
-    assert out["msg"] == "hello"
-    assert "ts" in out
+    assert out["message"] == "hello"
+    assert "timestamp" in out
 
 
 def test_extra_context_is_included():

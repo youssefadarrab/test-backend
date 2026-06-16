@@ -25,7 +25,7 @@ def derive_document_status(statuses: dict[str, str]) -> str:
       - ready   if external_call DONE
       - else    processing
     """
-    if any(s == StepStatus.ERROR.value for s in statuses.values()):
+    if any(status == StepStatus.ERROR.value for status in statuses.values()):
         return DocumentStatus.FAILED.value
     if statuses.get(StepName.EXTERNAL_CALL.value) == StepStatus.DONE.value:
         return DocumentStatus.READY.value

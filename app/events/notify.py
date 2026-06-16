@@ -65,17 +65,17 @@ class EventBroker:
 
     # ---- subscription (async side) ----
     def subscribe(self, document_id: str) -> asyncio.Queue:
-        q: asyncio.Queue = asyncio.Queue()
+        queue: asyncio.Queue = asyncio.Queue()
         with self._lock:
-            self._subscribers[document_id].add(q)
-        return q
+            self._subscribers[document_id].add(queue)
+        return queue
 
-    def unsubscribe(self, document_id: str, q: asyncio.Queue) -> None:
+    def unsubscribe(self, document_id: str, queue: asyncio.Queue) -> None:
         with self._lock:
-            subs = self._subscribers.get(document_id)
-            if subs:
-                subs.discard(q)
-                if not subs:
+            subscribers = self._subscribers.get(document_id)
+            if subscribers:
+                subscribers.discard(queue)
+                if not subscribers:
                     self._subscribers.pop(document_id, None)
 
     # ---- dispatch (listener-thread side) ----
@@ -84,9 +84,9 @@ class EventBroker:
             return
         with self._lock:
             queues = list(self._subscribers.get(document_id, ()))
-        for q in queues:
+        for queue in queues:
             # Hop back onto the event loop thread to touch the asyncio.Queue safely.
-            self._loop.call_soon_threadsafe(q.put_nowait, event)
+            self._loop.call_soon_threadsafe(queue.put_nowait, event)
 
     # ---- lifecycle ----
     def start(self, loop: asyncio.AbstractEventLoop, dsn: str) -> None:
@@ -99,26 +99,26 @@ class EventBroker:
 
     def _run(self, dsn: str) -> None:
         try:
-            conn = psycopg2.connect(dsn)
-            conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
-            cur = conn.cursor()
-            cur.execute(f"LISTEN {CHANNEL};")
+            connection = psycopg2.connect(dsn)
+            connection.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
+            cursor = connection.cursor()
+            cursor.execute(f"LISTEN {CHANNEL};")
             LOGGER.info("notify listener started on channel %s", CHANNEL)
         except Exception:  # pragma: no cover - depends on live DB
             LOGGER.exception("notify listener failed to start")
             return
 
         while not self._stop.is_set():
-            if select.select([conn], [], [], 1.0) == ([], [], []):
+            if select.select([connection], [], [], 1.0) == ([], [], []):
                 continue
-            conn.poll()
-            while conn.notifies:
-                n = conn.notifies.pop(0)
+            connection.poll()
+            while connection.notifies:
+                notification = connection.notifies.pop(0)
                 try:
-                    event = json.loads(n.payload)
+                    event = json.loads(notification.payload)
                     self._dispatch(event[KEY_DOCUMENT_ID], event)
                 except Exception:  # pragma: no cover
-                    LOGGER.exception("bad notify payload: %s", n.payload)
+                    LOGGER.exception("bad notify payload: %s", notification.payload)
 
 
 # Single shared broker per process.

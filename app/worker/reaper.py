@@ -19,9 +19,9 @@ import logging
 import time
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import transactions
 from app.config import get_settings
 from app.db import session_scope
 from app.events.notify import emit_event
@@ -49,17 +49,8 @@ def run_once(session: Session) -> int:
 
     # 1. Steps stuck in flight.
     queued_cutoff = now - timedelta(seconds=settings.step_timeout_seconds)
-    stale = (
-        session.execute(
-            select(PipelineStep)
-            .where(
-                PipelineStep.status.in_([StepStatus.QUEUED.value, StepStatus.RUNNING.value]),
-                PipelineStep.updated_at < queued_cutoff,
-            )
-            .with_for_update(skip_locked=True)
-        )
-        .scalars()
-        .all()
+    stale = transactions.lock_stale_steps(
+        session, [StepStatus.QUEUED.value, StepStatus.RUNNING.value], queued_cutoff
     )
     for step in stale:
         if step.attempts >= settings.step_max_attempts:
@@ -74,17 +65,8 @@ def run_once(session: Session) -> int:
 
     # 2. external_call waiting on a webhook that never came.
     callback_cutoff = now - timedelta(seconds=settings.callback_sla_seconds)
-    stuck = (
-        session.execute(
-            select(PipelineStep)
-            .where(
-                PipelineStep.status == StepStatus.AWAITING_CALLBACK.value,
-                PipelineStep.updated_at < callback_cutoff,
-            )
-            .with_for_update(skip_locked=True)
-        )
-        .scalars()
-        .all()
+    stuck = transactions.lock_stale_steps(
+        session, [StepStatus.AWAITING_CALLBACK.value], callback_cutoff
     )
     for step in stuck:
         LOGGER.info("partner callback timed out for %s", step.document_id)

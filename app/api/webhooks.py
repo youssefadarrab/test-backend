@@ -5,11 +5,11 @@ import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Header, HTTPException, Request, status
-from sqlalchemy import select
 
+from app import transactions
 from app.db import session_scope
 from app.events.notify import emit_event
-from app.models import PipelineStep, StepName, StepStatus, WebhookEvent
+from app.models import StepName, StepStatus, WebhookEvent
 from app.pipeline.transition import recompute_document_status
 from app.schemas import WebhookPayload
 from app.webhook_security import verify_signature
@@ -46,9 +46,7 @@ async def partner_webhook(
         session.commit()
 
         # 3. Resolve the tenant/document SERVER-SIDE via the opaque job_id we issued.
-        step = session.execute(
-            select(PipelineStep).where(PipelineStep.external_job_id == payload.job_id)
-        ).scalar_one_or_none()
+        step = transactions.get_step_by_job_id(session, payload.job_id)
         if step is None:
             # Unknown job_id: nothing to act on. 202 keeps us opaque to probers.
             return {"status": "accepted"}

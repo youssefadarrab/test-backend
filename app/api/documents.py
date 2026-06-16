@@ -4,9 +4,9 @@ import os
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import transactions
 from app.auth import get_current_user
 from app.config import get_settings
 from app.db import get_db
@@ -72,12 +72,7 @@ def list_documents(
     user: AppUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> list[DocumentListItem]:
-    rows = db.execute(
-        select(Document, AppUser.email)
-        .join(AppUser, Document.uploaded_by == AppUser.id)
-        .where(Document.org_id == user.org_id)  # tenant scoping
-        .order_by(Document.created_at.desc())
-    ).all()
+    rows = transactions.list_org_documents(db, user.org_id)
     return [
         DocumentListItem(
             id=doc.id,

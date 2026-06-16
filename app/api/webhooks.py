@@ -8,10 +8,10 @@ from fastapi import APIRouter, Header, HTTPException, Request, status
 
 from app import transactions
 from app.db import session_scope
-from app.events.notify import emit_event
+from app.events.notify import emit_event, step_event
 from app.models import StepName, StepStatus, WebhookEvent
 from app.pipeline.transition import Transitioner
-from app.schemas import WebhookPayload
+from app.schemas import WebhookPayload, WebhookStatus
 from app.webhook_security import verify_signature
 
 LOGGER = logging.getLogger("app.webhooks")
@@ -62,23 +62,23 @@ async def partner_webhook(
             )
             return {"status": "duplicate-ignored"}
 
-        if payload.status == "completed":
+        if payload.status == WebhookStatus.COMPLETED:
             step.status = StepStatus.DONE.value
             step.result = payload.result
             step.finished_at = datetime.now(timezone.utc)
             emit_event(
                 session,
                 step.document_id,
-                {"step": StepName.EXTERNAL_CALL.value, "status": StepStatus.DONE.value},
+                step_event(StepName.EXTERNAL_CALL.value, StepStatus.DONE.value),
             )
-        else:  # "failed"
+        else:  # WebhookStatus.FAILED
             step.status = StepStatus.ERROR.value
             step.error_text = f"partner reported failure: {json.dumps(payload.result)}"
             step.finished_at = datetime.now(timezone.utc)
             emit_event(
                 session,
                 step.document_id,
-                {"step": StepName.EXTERNAL_CALL.value, "status": StepStatus.ERROR.value},
+                step_event(StepName.EXTERNAL_CALL.value, StepStatus.ERROR.value),
             )
         session.commit()
 

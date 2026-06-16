@@ -2,6 +2,11 @@ from functools import lru_cache
 
 from app.secrets import secrets
 
+# DB URL schemes: SQLAlchemy carries the driver (+psycopg2); libpq (the psycopg2
+# LISTEN connection) wants the plain scheme.
+SQLALCHEMY_PG_SCHEME = "postgresql+psycopg2://"
+LIBPQ_PG_SCHEME = "postgresql://"
+
 
 class Settings:
     """Resolved configuration. Secrets and config are read through the
@@ -38,7 +43,7 @@ class Settings:
     # LISTEN/NOTIFY goes through psycopg2 directly, which wants a plain libpq DSN.
     @property
     def listen_dsn(self) -> str:
-        return self.database_url.replace("postgresql+psycopg2://", "postgresql://")
+        return self.database_url.replace(SQLALCHEMY_PG_SCHEME, LIBPQ_PG_SCHEME)
 
 
 @lru_cache

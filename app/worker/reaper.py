@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 from app import transactions
 from app.config import get_settings
 from app.db import session_scope
-from app.events.notify import emit_event
+from app.events.notify import emit_event, step_event
 from app.models import PipelineStep, StepName, StepStatus
 from app.observability import configure_logging, set_trace_id
 from app.pipeline.publisher import publish_step
@@ -40,7 +40,7 @@ def _fail(session: Session, step: PipelineStep, reason: str) -> None:
     step.status = StepStatus.ERROR.value
     step.error_text = reason
     step.finished_at = datetime.now(timezone.utc)
-    emit_event(session, step.document_id, {"step": step.name, "status": StepStatus.ERROR.value})
+    emit_event(session, step.document_id, step_event(step.name, StepStatus.ERROR.value))
     session.commit()
     _TRANSITIONER.recompute_document_status(session, step.document_id)
 

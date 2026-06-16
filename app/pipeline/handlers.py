@@ -11,7 +11,7 @@ finished step is a no-op), crash-safe (commit the terminal state, THEN ack),
 attempt-bounded (the DB `attempts` counter drives terminal failure, with the
 broker delivery-limit as a backstop).
 
-`handle` returns "ack" (consume) or "retry" (nack + requeue).
+`handle` returns a `HandlerAction` (ACK to consume, RETRY to nack + requeue).
 """
 from __future__ import annotations
 
@@ -19,13 +19,15 @@ import logging
 import uuid
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
+from enum import auto
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.events.notify import emit_event
+from app.enums import LowerStrEnum
+from app.events.notify import emit_event, step_event
 from app.models import Document, DocumentStatus, PipelineStep, StepName, StepStatus
 from app.pipeline import steps as step_fns
 from app.pipeline.messages import BackendStepPayload
@@ -36,6 +38,13 @@ LOGGER = logging.getLogger("app.handlers")
 
 # Statuses from which there is no point (re)running a step.
 _TERMINAL_FOR_RUN = {StepStatus.DONE.value, StepStatus.AWAITING_CALLBACK.value, StepStatus.ERROR.value}
+
+
+class HandlerAction(LowerStrEnum):
+    """What the worker should do with the message after handling."""
+
+    ACK = auto()      # consume it
+    RETRY = auto()    # nack + requeue
 
 
 def _now() -> datetime:
@@ -74,29 +83,29 @@ class StepHandler(ABC):
         row.result = output
         row.status = StepStatus.DONE.value
         row.finished_at = _now()
-        emit_event(session, document_id, {"step": self.step.value, "status": StepStatus.DONE.value})
+        emit_event(session, document_id, step_event(self.step.value, StepStatus.DONE.value))
         session.commit()
         LOGGER.info("step done", extra={"document_id": str(document_id), "step": self.step.value})
 
     # ---- lifecycle (shared) ----
-    def handle(self, session: Session, payload: BackendStepPayload) -> str:
+    def handle(self, session: Session, payload: BackendStepPayload) -> HandlerAction:
         document_id = payload.document_id
         by_name = self._load_steps(session, document_id)
         row = by_name.get(self.step.value)
         if row is None:  # pragma: no cover - message for a deleted document
-            return "ack"
+            return HandlerAction.ACK
 
         # Idempotency: nothing to do for an already-finished step, or a failed doc.
         if row.status in _TERMINAL_FOR_RUN:
-            return "ack"
+            return HandlerAction.ACK
         document = session.get(Document, document_id)
         if document is None or document.status == DocumentStatus.FAILED.value:
-            return "ack"
+            return HandlerAction.ACK
 
         # Mark RUNNING (and surface it) before doing the work.
         row.status = StepStatus.RUNNING.value
         row.started_at = row.started_at or _now()
-        emit_event(session, document_id, {"step": self.step.value, "status": StepStatus.RUNNING.value})
+        emit_event(session, document_id, step_event(self.step.value, StepStatus.RUNNING.value))
         session.commit()
 
         try:
@@ -110,7 +119,7 @@ class StepHandler(ABC):
         if row.status == StepStatus.DONE.value:
             self._transitioner.trigger_successors(session, document_id)
             self._transitioner.recompute_document_status(session, document_id)
-        return "ack"
+        return HandlerAction.ACK
 
     @staticmethod
     def _load_steps(session: Session, document_id: uuid.UUID) -> dict[str, PipelineStep]:
@@ -121,7 +130,7 @@ class StepHandler(ABC):
 
     def _on_failure(
         self, session: Session, document_id: uuid.UUID, row: PipelineStep, exc: Exception
-    ) -> str:
+    ) -> HandlerAction:
         row.attempts += 1
         error = f"{type(exc).__name__}: {exc}"
         context = {"document_id": str(document_id), "step": row.name, "attempt": row.attempts, "error": error}
@@ -130,16 +139,16 @@ class StepHandler(ABC):
             row.status = StepStatus.ERROR.value
             row.error_text = error
             row.finished_at = _now()
-            emit_event(session, document_id, {"step": row.name, "status": StepStatus.ERROR.value})
+            emit_event(session, document_id, step_event(row.name, StepStatus.ERROR.value))
             session.commit()
             LOGGER.error("step failed permanently", extra=context)
             self._transitioner.recompute_document_status(session, document_id)  # -> failed
-            return "ack"
+            return HandlerAction.ACK
 
         LOGGER.warning("step failed, will retry", extra=context)
         row.status = StepStatus.QUEUED.value  # hand back to the broker for redelivery
         session.commit()
-        return "retry"
+        return HandlerAction.RETRY
 
 
 class OcrStepHandler(StepHandler):
@@ -198,7 +207,7 @@ class ExternalCallStepHandler(StepHandler):
         row.external_job_id = output["external_job_id"]
         row.status = StepStatus.AWAITING_CALLBACK.value
         emit_event(
-            session, document_id, {"step": self.step.value, "status": StepStatus.AWAITING_CALLBACK.value}
+            session, document_id, step_event(self.step.value, StepStatus.AWAITING_CALLBACK.value)
         )
         session.commit()
         LOGGER.info(

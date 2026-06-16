@@ -13,7 +13,7 @@ import uuid
 from sqlalchemy.orm import Session
 
 from app import transactions
-from app.events.notify import emit_event
+from app.events.notify import doc_status_event, emit_event, step_event
 from app.models import Document, DocumentStatus, StepName, StepStatus
 from app.pipeline.dag import PIPELINE, DependencyGraph
 from app.pipeline.publisher import publish_step
@@ -44,7 +44,7 @@ class Transitioner:
         won the race. Commits the claim and its NOTIFY together."""
         claimed = transactions.claim_pending_step(session, document_id, step.value)
         if claimed:
-            emit_event(session, document_id, {"step": step.value, "status": StepStatus.QUEUED.value})
+            emit_event(session, document_id, step_event(step.value, StepStatus.QUEUED.value))
         session.commit()
         return claimed
 
@@ -65,6 +65,6 @@ class Transitioner:
         document = session.get(Document, document_id)
         if document is not None and document.status != new:
             document.status = new
-            emit_event(session, document_id, {"doc_status": new})
+            emit_event(session, document_id, doc_status_event(new))
             session.commit()
         return new

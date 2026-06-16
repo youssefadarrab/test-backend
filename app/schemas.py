@@ -2,9 +2,17 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any, Literal
+from enum import auto
+from typing import Any
 
 from pydantic import BaseModel, Field
+
+from app.enums import LowerStrEnum
+
+
+class WebhookStatus(LowerStrEnum):
+    COMPLETED = auto()
+    FAILED = auto()
 
 
 class LoginRequest(BaseModel):
@@ -49,7 +57,7 @@ class DocumentDetail(BaseModel):
 
 class WebhookPayload(BaseModel):
     job_id: str
-    status: Literal["completed", "failed"]
+    status: WebhookStatus
     result: dict[str, Any] = Field(default_factory=dict)
     occurred_at: datetime | None = None
 

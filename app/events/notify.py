@@ -24,11 +24,32 @@ from sqlalchemy.orm import Session
 CHANNEL = "doc_events"
 LOGGER = logging.getLogger("app.events")
 
+# SSE / NOTIFY payload keys, defined once so producers and consumers agree.
+KEY_DOCUMENT_ID = "document_id"
+KEY_STEP = "step"
+KEY_STATUS = "status"
+KEY_DOC_STATUS = "doc_status"
+KEY_TYPE = "type"
+KEY_STEPS = "steps"
+TYPE_SNAPSHOT = "snapshot"
+
+
+def step_event(step: str, status: str) -> dict:
+    return {KEY_STEP: step, KEY_STATUS: status}
+
+
+def doc_status_event(status: str) -> dict:
+    return {KEY_DOC_STATUS: status}
+
+
+def snapshot_event(document_id: str, doc_status: str, steps: dict[str, str]) -> dict:
+    return {KEY_TYPE: TYPE_SNAPSHOT, KEY_DOCUMENT_ID: document_id, KEY_DOC_STATUS: doc_status, KEY_STEPS: steps}
+
 
 def emit_event(session: Session, document_id, event: dict) -> None:
     """Queue a NOTIFY on the current transaction. Payload must stay < 8000 bytes,
     so we send a thin event; clients re-fetch detail when they need it."""
-    payload = json.dumps({"document_id": str(document_id), **event})
+    payload = json.dumps({KEY_DOCUMENT_ID: str(document_id), **event})
     session.execute(text("SELECT pg_notify(:chan, :payload)"), {"chan": CHANNEL, "payload": payload})
 
 
@@ -95,7 +116,7 @@ class EventBroker:
                 n = conn.notifies.pop(0)
                 try:
                     event = json.loads(n.payload)
-                    self._dispatch(event["document_id"], event)
+                    self._dispatch(event[KEY_DOCUMENT_ID], event)
                 except Exception:  # pragma: no cover
                     LOGGER.exception("bad notify payload: %s", n.payload)
 

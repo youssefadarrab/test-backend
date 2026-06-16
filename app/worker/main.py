@@ -12,7 +12,7 @@ import uuid
 from app.db import session_scope
 from app.models import StepName
 from app.observability import configure_logging, set_trace_id
-from app.pipeline.handlers import STEP_HANDLERS
+from app.pipeline.handlers import STEP_HANDLERS, HandlerAction
 from app.pipeline.messages import BackendStepPayload
 from app.worker.broker import connect, declare_topology, queue_name
 
@@ -22,7 +22,7 @@ LOGGER = logging.getLogger("app.worker")
 def _make_callback(step_value: str):
     def callback(channel, method, _properties, body) -> None:
         set_trace_id(uuid.uuid4().hex)
-        action = "retry"
+        action = HandlerAction.RETRY
         try:
             payload = BackendStepPayload.model_validate_json(body)
             with session_scope() as session:
@@ -34,12 +34,12 @@ def _make_callback(step_value: str):
                         "handler crashed",
                         extra={"document_id": str(payload.document_id), "step": payload.step.value},
                     )
-                    action = "retry"
+                    action = HandlerAction.RETRY
         except Exception:
             LOGGER.exception("unparseable message dropped", extra={"queue": step_value})
-            action = "ack"  # unparseable: drop it, don't poison the queue
+            action = HandlerAction.ACK  # unparseable: drop it, don't poison the queue
 
-        if action == "ack":
+        if action == HandlerAction.ACK:
             channel.basic_ack(delivery_tag=method.delivery_tag)
         else:
             channel.basic_nack(delivery_tag=method.delivery_tag, requeue=True)

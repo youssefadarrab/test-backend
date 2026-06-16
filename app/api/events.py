@@ -16,7 +16,7 @@ from fastapi.responses import StreamingResponse
 
 from app.auth import get_current_user
 from app.db import session_scope
-from app.events.notify import broker
+from app.events.notify import broker, snapshot_event
 from app.models import AppUser, Document
 
 router = APIRouter(tags=["events"])
@@ -34,12 +34,7 @@ def _load_snapshot(document_id: uuid.UUID, org_id: uuid.UUID) -> dict | None:
         doc = db.get(Document, document_id)
         if doc is None or doc.org_id != org_id:
             return None
-        return {
-            "type": "snapshot",
-            "document_id": str(doc.id),
-            "doc_status": doc.status,
-            "steps": {s.name: s.status for s in doc.steps},
-        }
+        return snapshot_event(str(doc.id), doc.status, {s.name: s.status for s in doc.steps})
 
 
 @router.get("/documents/{document_id}/events")

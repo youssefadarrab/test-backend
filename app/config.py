@@ -18,6 +18,8 @@ class Settings:
         self.jwt_secret = secrets.get("JWT_SECRET", "dev-jwt-secret-change-me")
         self.jwt_algorithm = secrets.get("JWT_ALGORITHM", "HS256")
         self.jwt_expire_minutes = secrets.get_int("JWT_EXPIRE_MINUTES", 720)
+        # Tolerate small clock skew between the API, workers and clients on exp/iat/nbf.
+        self.jwt_leeway_seconds = secrets.get_int("JWT_LEEWAY_SECONDS", 30)
 
         self.partner_hmac_secret = secrets.get("PARTNER_HMAC_SECRET", "dev-partner-secret")
 

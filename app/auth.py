@@ -36,7 +36,10 @@ def get_current_user(
 ) -> AppUser:
     try:
         claims = jwt.decode(
-            creds.credentials, settings.jwt_secret, algorithms=[settings.jwt_algorithm]
+            creds.credentials,
+            settings.jwt_secret,
+            algorithms=[settings.jwt_algorithm],
+            leeway=settings.jwt_leeway_seconds,
         )
         user_id = uuid.UUID(claims["sub"])
     except (jwt.PyJWTError, KeyError, ValueError):

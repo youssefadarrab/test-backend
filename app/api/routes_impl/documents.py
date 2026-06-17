@@ -6,13 +6,11 @@ objects (or None), so it can be tested without HTTP.
 """
 from __future__ import annotations
 
-import os
 import uuid
 
 from sqlalchemy.orm import Session
 
 from app import transactions
-from app.config import get_settings
 from app.models import AppUser, Document, DocumentStatus, PipelineStep, StepName, StepStatus
 from app.pagination import decode_cursor, encode_cursor
 from app.pipeline.dag import PIPELINE
@@ -25,18 +23,7 @@ from app.schemas import (
     PaginatedDocuments,
     StepOut,
 )
-
-settings = get_settings()
-
-
-def _store_bytes(org_id: uuid.UUID, document_id: uuid.UUID, data: bytes) -> str:
-    # The file is never read (mocks only); we just persist it to a volume.
-    folder = os.path.join(settings.storage_dir, str(org_id))
-    os.makedirs(folder, exist_ok=True)
-    path = os.path.join(folder, str(document_id))
-    with open(path, "wb") as file_handle:
-        file_handle.write(data)
-    return path
+from app.storage import get_storage
 
 
 def create_document(session: Session, user: AppUser, filename: str, data: bytes) -> DocumentCreated:
@@ -50,7 +37,7 @@ def create_document(session: Session, user: AppUser, filename: str, data: bytes)
     session.add(document)
     session.flush()  # assign document.id
 
-    document.storage_uri = _store_bytes(user.org_id, document.id, data)
+    document.storage_uri = get_storage().save(user.org_id, document.id, data)
 
     # Create all step rows up front; the entry step(s) start QUEUED, the rest PENDING.
     entry = set(PIPELINE.entry_nodes)

@@ -159,7 +159,7 @@ without changing call sites.
 
 ```
 app/
-  config.py db.py models.py schemas.py auth.py webhook_security.py main.py seed.py secrets.py
+  config.py db.py models.py schemas.py auth.py webhook_security.py main.py seed.py secrets.py storage.py
   api/        auth.py documents.py webhooks.py events.py dev.py  routes_impl/
   pipeline/   steps.py dag.py transition.py handlers.py publisher.py messages.py
   worker/     broker.py main.py reaper.py

@@ -24,6 +24,12 @@ from sqlalchemy.orm import Session
 CHANNEL = "doc_events"
 LOGGER = logging.getLogger("app.events")
 
+# Per-client buffer cap. A document emits only a handful of deltas, so a client this
+# far behind is wedged (dead connection, paused client). We drop deltas rather than
+# grow without bound: the snapshot sent on (re)connect is authoritative, so a dropped
+# delta is recovered on resync.
+_SUBSCRIBER_QUEUE_MAXSIZE = 100
+
 # SSE / NOTIFY payload keys, defined once so producers and consumers agree.
 KEY_DOCUMENT_ID = "document_id"
 KEY_STEP = "step"
@@ -62,10 +68,11 @@ class EventBroker:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
+        self.dropped_events = 0  # deltas dropped to slow consumers (observability)
 
     # ---- subscription (async side) ----
     def subscribe(self, document_id: str) -> asyncio.Queue:
-        queue: asyncio.Queue = asyncio.Queue()
+        queue: asyncio.Queue = asyncio.Queue(maxsize=_SUBSCRIBER_QUEUE_MAXSIZE)
         with self._lock:
             self._subscribers[document_id].add(queue)
         return queue
@@ -86,7 +93,16 @@ class EventBroker:
             queues = list(self._subscribers.get(document_id, ()))
         for queue in queues:
             # Hop back onto the event loop thread to touch the asyncio.Queue safely.
-            self._loop.call_soon_threadsafe(queue.put_nowait, event)
+            self._loop.call_soon_threadsafe(self._enqueue, queue, event)
+
+    def _enqueue(self, queue: asyncio.Queue, event: dict) -> None:
+        """Runs on the loop thread. Drops the delta if the client's buffer is full,
+        rather than letting one slow consumer grow without bound."""
+        try:
+            queue.put_nowait(event)
+        except asyncio.QueueFull:
+            self.dropped_events += 1
+            LOGGER.warning("dropping event for a slow SSE consumer (queue full)")
 
     # ---- lifecycle ----
     def start(self, loop: asyncio.AbstractEventLoop, dsn: str) -> None:

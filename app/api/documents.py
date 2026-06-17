@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.api.routes_impl import documents as impl
 from app.auth import get_current_user
 from app.db import get_session
 from app.models import AppUser
-from app.schemas import DocumentCreated, DocumentDetail, DocumentListItem
+from app.schemas import DocumentCreated, DocumentDetail, PaginatedDocuments
 
 router = APIRouter(tags=["documents"])
 
@@ -23,12 +23,17 @@ def upload_document(
     return impl.create_document(session, user, file.filename or "upload.bin", file.file.read())
 
 
-@router.get("/documents", response_model=list[DocumentListItem])
+@router.get("/documents", response_model=PaginatedDocuments)
 def list_documents(
+    limit: int = Query(20, ge=1, le=100, description="Page size"),
+    cursor: str | None = Query(None, description="Opaque cursor from a previous page's next_cursor"),
     user: AppUser = Depends(get_current_user),
     session: Session = Depends(get_session),
-) -> list[DocumentListItem]:
-    return impl.list_documents(session, user.org_id)
+) -> PaginatedDocuments:
+    try:
+        return impl.list_documents(session, user.org_id, limit, cursor)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid cursor")
 
 
 @router.get("/documents/{document_id}", response_model=DocumentDetail)

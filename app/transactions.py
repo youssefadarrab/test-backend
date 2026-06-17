@@ -15,7 +15,7 @@ import uuid
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import select, update
+from sqlalchemy import select, tuple_, update
 from sqlalchemy.orm import Session
 
 from app.models import AppUser, Document, PipelineStep, StepStatus
@@ -43,14 +43,29 @@ def get_step_by_job_id(session: Session, job_id: str) -> PipelineStep | None:
     ).scalar_one_or_none()
 
 
-def list_org_documents(session: Session, org_id: uuid.UUID) -> Sequence[tuple[Document, str]]:
-    """(document, uploader_email) for one org, newest first."""
-    return session.execute(
+def list_org_documents(
+    session: Session,
+    org_id: uuid.UUID,
+    limit: int,
+    after: tuple[datetime, uuid.UUID] | None = None,
+) -> Sequence[tuple[Document, str]]:
+    """(document, uploader_email) for one org, newest first, at most `limit` rows.
+
+    Keyset pagination: when `after` (the (created_at, id) of the previous page's
+    last row) is given, only rows ordering strictly after it are returned. The
+    (created_at, id) tie-break makes the order total, since created_at is not unique.
+    Leans on ix_document_org_created (org_id, created_at)."""
+    query = (
         select(Document, AppUser.email)
         .join(AppUser, Document.uploaded_by == AppUser.id)
         .where(Document.org_id == org_id)  # tenant scoping
-        .order_by(Document.created_at.desc())
-    ).all()
+        .order_by(Document.created_at.desc(), Document.id.desc())
+        .limit(limit)
+    )
+    if after is not None:
+        # Newest-first, so "after" means a smaller (created_at, id) row value.
+        query = query.where(tuple_(Document.created_at, Document.id) < tuple_(*after))
+    return session.execute(query).all()
 
 
 def lock_stale_steps(

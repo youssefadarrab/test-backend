@@ -45,6 +45,14 @@ class DocumentListItem(BaseModel):
     created_at: datetime
 
 
+class PaginatedDocuments(BaseModel):
+    """One page of documents plus the cursor to fetch the next one.
+    `next_cursor` is null when this is the last page."""
+
+    items: list[DocumentListItem]
+    next_cursor: str | None = None
+
+
 class ExtractedData(BaseModel):
     """The pipeline's aggregated output, returned once a document is `ready`."""
 

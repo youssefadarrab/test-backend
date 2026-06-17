@@ -14,9 +14,17 @@ from sqlalchemy.orm import Session
 from app import transactions
 from app.config import get_settings
 from app.models import AppUser, Document, DocumentStatus, PipelineStep, StepName, StepStatus
+from app.pagination import decode_cursor, encode_cursor
 from app.pipeline.dag import PIPELINE
 from app.pipeline.publisher import publish_step
-from app.schemas import DocumentCreated, DocumentDetail, DocumentListItem, ExtractedData, StepOut
+from app.schemas import (
+    DocumentCreated,
+    DocumentDetail,
+    DocumentListItem,
+    ExtractedData,
+    PaginatedDocuments,
+    StepOut,
+)
 
 settings = get_settings()
 
@@ -64,8 +72,19 @@ def create_document(session: Session, user: AppUser, filename: str, data: bytes)
     return DocumentCreated(id=document.id, status=document.status)
 
 
-def list_documents(session: Session, org_id: uuid.UUID) -> list[DocumentListItem]:
-    return [
+def list_documents(
+    session: Session, org_id: uuid.UUID, limit: int, cursor: str | None = None
+) -> PaginatedDocuments:
+    """One keyset page of the org's documents. `cursor` is opaque; a malformed one
+    raises ValueError (the route turns it into a 400)."""
+    after = decode_cursor(cursor) if cursor else None
+
+    # Fetch one extra row to learn whether a next page exists without a count query.
+    rows = transactions.list_org_documents(session, org_id, limit + 1, after)
+    has_more = len(rows) > limit
+    rows = rows[:limit]
+
+    items = [
         DocumentListItem(
             id=document.id,
             filename=document.filename,
@@ -73,8 +92,15 @@ def list_documents(session: Session, org_id: uuid.UUID) -> list[DocumentListItem
             status=document.status,
             created_at=document.created_at,
         )
-        for document, email in transactions.list_org_documents(session, org_id)
+        for document, email in rows
     ]
+
+    next_cursor = None
+    if has_more:
+        last_document = rows[-1][0]
+        next_cursor = encode_cursor(last_document.created_at, last_document.id)
+
+    return PaginatedDocuments(items=items, next_cursor=next_cursor)
 
 
 def _extracted_data(steps: dict[str, PipelineStep]) -> ExtractedData:

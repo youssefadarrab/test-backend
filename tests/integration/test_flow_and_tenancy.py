@@ -96,8 +96,8 @@ def test_tenant_isolation(client, seeded, db, fake_publish, deterministic_steps)
 
     # Bob (other org) cannot see Alice's document -> 404, not 403 (no existence leak).
     assert client.get(f"/v1/docpipe/documents/{doc_id}", headers=_auth(youssef)).status_code == 404
-    assert client.get("/v1/docpipe/documents", headers=_auth(youssef)).json() == []
-    assert len(client.get("/v1/docpipe/documents", headers=_auth(alice)).json()) == 1
+    assert client.get("/v1/docpipe/documents", headers=_auth(youssef)).json()["items"] == []
+    assert len(client.get("/v1/docpipe/documents", headers=_auth(alice)).json()["items"]) == 1
 
 
 def test_auth_required(client, seeded):

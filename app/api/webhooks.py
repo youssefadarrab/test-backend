@@ -6,14 +6,19 @@ from fastapi import APIRouter, Header, HTTPException, Request, status
 
 from app.api.routes_impl import webhooks as impl
 from app.db import session_scope
-from app.schemas import WebhookPayload, WebhookResponse
+from app.schemas import WEBHOOK_REQUEST_BODY_OPENAPI, WebhookPayload, WebhookResponse
 from app.webhook_security import verify_signature
 
 LOGGER = logging.getLogger("app.webhooks")
 router = APIRouter(tags=["webhooks"])
 
 
-@router.post("/webhooks/partner", response_model=WebhookResponse)
+@router.post(
+    "/webhooks/partner",
+    response_model=WebhookResponse,
+    # Raw-body route: declare the body for Swagger without consuming it (see schemas).
+    openapi_extra=WEBHOOK_REQUEST_BODY_OPENAPI,
+)
 async def partner_webhook(
     request: Request,
     x_partner_signature: str | None = Header(default=None),

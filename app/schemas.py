@@ -94,3 +94,37 @@ class WebhookResponse(BaseModel):
 class SignWebhookResponse(BaseModel):
     signature: str
     header: str = "X-Partner-Signature"
+
+
+# The webhook routes read the raw request body directly (request.body()) so the HMAC
+# is computed over the exact bytes received. As a side effect FastAPI generates no
+# request-body field for them, which leaves no editable JSON box in Swagger. This
+# explicit spec, merged via the routes' `openapi_extra`, restores that editor (with a
+# ready-to-edit example) so the webhook is testable end-to-end from /docs.
+WEBHOOK_BODY_EXAMPLE = {
+    "job_id": "j_abc123def4567890",
+    "status": "completed",
+    "result": {"indexed_at": "2026-06-06T06:06:06Z"},
+    "occurred_at": "2026-06-06T06:06:06Z",
+}
+
+WEBHOOK_REQUEST_BODY_OPENAPI = {
+    "requestBody": {
+        "required": True,
+        "content": {
+            "application/json": {
+                "schema": {
+                    "type": "object",
+                    "required": ["job_id", "status"],
+                    "properties": {
+                        "job_id": {"type": "string"},
+                        "status": {"type": "string", "enum": ["completed", "failed"]},
+                        "result": {"type": "object"},
+                        "occurred_at": {"type": "string", "format": "date-time"},
+                    },
+                },
+                "example": WEBHOOK_BODY_EXAMPLE,
+            }
+        },
+    }
+}

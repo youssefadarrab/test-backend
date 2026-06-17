@@ -7,13 +7,18 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Request
 
-from app.schemas import SignWebhookResponse
+from app.schemas import WEBHOOK_REQUEST_BODY_OPENAPI, SignWebhookResponse
 from app.webhook_security import compute_signature
 
 router = APIRouter(tags=["dev"])
 
 
-@router.post("/dev/sign-webhook", response_model=SignWebhookResponse)
+@router.post(
+    "/dev/sign-webhook",
+    response_model=SignWebhookResponse,
+    # Raw-body route: declare the body for Swagger without consuming it (see schemas).
+    openapi_extra=WEBHOOK_REQUEST_BODY_OPENAPI,
+)
 async def sign_webhook(request: Request) -> SignWebhookResponse:
     """POST the exact JSON body you intend to send to /webhooks/partner; returns
     the signature for that body's raw bytes."""
